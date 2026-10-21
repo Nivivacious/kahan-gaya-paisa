@@ -77,7 +77,7 @@ button, input, select { font: inherit; color: inherit; }
 .hero__rotate { display: inline-flex; }
 .hero__lede { max-width: 30em; margin: 20px 0 0; font-size: 19px; line-height: 1.5; color: var(--ink-2); }
 .hero__built { margin: 16px 0 0; font-size: 13.5px; color: var(--ink-3); }
-.hero__kite { display: flex; justify-content: flex-end; margin-bottom: -60px; }
+.hero__kite { display: flex; justify-content: flex-end; margin-bottom: -16px; }
 
 .kite { width: 100%; max-width: 320px; height: auto; overflow: visible; }
 .kite__string { stroke: var(--ink-2); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; opacity: 0.75; }
@@ -277,4 +277,53 @@ h2 { font-weight: 640; font-size: 21px; letter-spacing: -0.015em; margin: 0; }
 .peek__block pre {
   margin: 0; padding: 14px 16px; border-radius: 12px; overflow-x: auto;
   background: #10172b; color: #dfe5f2; font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
+}
+
+/* ---------- IVR opener ---------- */
+.ivr {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 28px; align-items: center;
+  margin: 0 0 28px; padding: 26px 28px; border-radius: 22px; background: var(--ink); color: var(--sheet);
+}
+.ivr h2 { color: var(--sheet); font-size: 24px; }
+.ivr__copy p { margin: 6px 0 0; color: color-mix(in srgb, var(--sheet) 70%, transparent); font-size: 16px; }
+.ivr__out {
+  display: inline-block; margin-top: 18px; padding: 9px 18px; border-radius: 999px; background: var(--kite); color: #fff;
+  font-weight: 600; text-decoration: none;
+}
+.ivr__out:hover { color: #fff; background: var(--kite-deep); }
+.ivr__phone { background: #0b1122; border-radius: 18px; padding: 14px; }
+.ivr__screen { min-height: 92px; padding: 10px 12px; border-radius: 10px; background: #1c2742; font-size: 14px; line-height: 1.5; }
+.ivr__screen p { margin: 4px 0 0; color: #e8ecf6; }
+.ivr__hold { font-family: var(--mono); font-size: 11.5px; color: #93a0bf; }
+.ivr__keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.ivr__keys button {
+  height: 40px; border-radius: 10px; border: 1px solid #2a3656; background: #141c33; color: #e8ecf6;
+  font-family: var(--mono); font-size: 16px; cursor: pointer; transition: background-color 120ms ease, transform 80ms ease;
+}
+.ivr__keys button:hover { background: #1d2846; }
+.ivr__keys button:active { transform: scale(0.95); }
+
+/* ---------- callers, chips, hand-off ---------- */
+.callers { display: inline-flex; margin-top: 12px; padding: 3px; border-radius: 999px; background: var(--paper); border: 1px solid var(--hair); }
+.callers button { border: 0; background: transparent; padding: 6px 14px; border-radius: 999px; font-size: 14px; cursor: pointer; color: var(--ink-2); }
+.callers button[aria-pressed="true"] { background: var(--sheet); color: var(--ink); box-shadow: 0 1px 2px rgba(22, 32, 58, 0.12); }
+.chip {
+  display: inline-block; margin-left: 8px; padding: 0 8px; border-radius: 999px; font-weight: 500; font-size: 11.5px;
+  color: var(--kite); background: var(--kite-wash); letter-spacing: 0;
+}
+.chip--quiet { color: var(--ink-3); background: var(--paper); }
+.call__person {
+  margin-top: 10px; padding: 0; border: 0; background: none; color: var(--ink-2); font-size: 13.5px;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.call__person:hover { color: var(--kite); }
+.handoff { margin: 4px 0 18px; padding: 16px 18px; border-radius: 16px; border: 1px solid var(--hair); background: var(--paper); }
+.handoff__tag { font-size: 12px; font-weight: 600; color: var(--leaf); }
+.handoff__brief { margin: 6px 0 0; font-size: 16px; font-weight: 500; }
+.handoff__lines { list-style: none; margin: 12px 0 8px; padding: 0; display: grid; gap: 6px; font-size: 14px; color: var(--ink-2); }
+.handoff__lines span { display: inline-block; min-width: 64px; font-weight: 600; color: var(--ink-3); font-size: 12px; }
+.handoff small { color: var(--ink-3); font-size: 12px; }
+
+@media (max-width: 700px) {
+  .ivr { grid-template-columns: 1fr; padding: 20px; }
 }

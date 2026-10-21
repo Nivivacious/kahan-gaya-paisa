@@ -12,15 +12,15 @@ const LANG_NAMES = {
 }
 
 // Words Saaras v4 should listen for: names and payments jargon that generic ASR mangles.
-const KEYTERMS = ["UPI", "UTR", "ARN", "refund", "reversal", "Saathi Bank", "Sri Ganesh Provisions", "debit card", "PhonePe", "Google Pay", "Paytm", "BHIM"];
+const KEYTERMS = ["UPI", "UTR", "ARN", "refund", "reversal", "Saathi Bank", "Sri Ganesh Provisions", "Suresh Kumar", "Airtel", "debit card", "PhonePe", "Google Pay", "Paytm", "BHIM"];
 
 function istDate(offsetDays) {
   const d = new Date(Date.now() + 5.5 * 3600 * 1000 + offsetDays * 86400 * 1000);
   return d.toISOString().slice(0, 10);
 }
 
-function ledger() {
-  return {
+const LEDGERS = {
+  lakshmi: () => ({
     customer: { name: "Lakshmi R", city: "Bengaluru", account: "Savings ending 4417", card: "Debit card ending 2290" },
     transactions: [
       {
@@ -42,10 +42,37 @@ function ledger() {
         reference: "ARN 74332746287001234567890",
       },
     ],
-  };
+  }),
+  ramesh: () => ({
+    customer: { name: "Ramesh Yadav", city: "Delhi", account: "Savings ending 8830" },
+    transactions: [
+      {
+        id: "R1", type: "UPI transfer to a person (friend)", amount_inr: 5000, to: "Suresh Kumar", date: istDate(0),
+        status: "Money debited from the customer's account, but the friend's bank could not credit it. Marked FAILED.",
+        resolution: `Automatic reversal has started. Under RBI's turnaround-time rules (circular of 20 Sept 2019), a failed UPI transfer to a person must be reversed by T+1 day, so by ${istDate(1)} at the latest. If it comes later, the bank owes ₹100 for every day of delay, without him having to claim it. Suresh did not get the money, so Ramesh can send it again if he needs to.`,
+        reference: "UPI ref (UTR) 629144810077",
+      },
+      {
+        id: "R2", type: "UPI payment to a merchant (mobile recharge)", amount_inr: 299, to: "Airtel prepaid recharge", date: istDate(-2),
+        status: "Money debited, recharge not done. Marked FAILED.",
+        resolution: `Automatic reversal has started. A failed UPI payment to a merchant must be reversed within T+5 days, so by ${istDate(3)} at the latest, with ₹100 a day owed after that.`,
+        reference: "UPI ref (UTR) 629121003311",
+      },
+      {
+        id: "R3", type: "Salary credit", amount_inr: 28000, from: "employer", date: istDate(-6),
+        status: "Credited successfully.",
+        resolution: "Nothing to do; it is in the account.",
+        reference: "NEFT credit",
+      },
+    ],
+  }),
+};
+
+function ledger(caller) {
+  return (LEDGERS[caller] || LEDGERS.lakshmi)();
 }
 
-function systemPrompt(lang) {
+function systemPrompt(lang, caller) {
   const name = LANG_NAMES[lang] || "the customer's language";
   return [
     "You are the voice support agent for Saathi Bank, a fictional Indian bank used in a product demo.",
@@ -53,10 +80,10 @@ function systemPrompt(lang) {
     "Start your reply with the id of the transaction the customer is asking about in square brackets, for example [T1]. Use [NONE] if it matches none. Then the reply itself.",
     "Your reply is read aloud, so: at most three short sentences, no lists, no markdown, no emojis. Say amounts and dates the way people say them out loud.",
     "Answer only from the ledger below. Say what happened, what happens next, and by when.",
-    "If the customer disputes something, asks about something outside the ledger, or sounds very upset, say you are connecting them to a person and stop.",
+    "If the customer disputes something, asks for a person, asks about something outside the ledger, or sounds very upset: write [HANDOFF] right after the transaction id, then one short sentence saying you are connecting them to a person who already has the details, and stop.",
     "Never ask for an OTP, PIN, CVV or full card number.",
     "LEDGER (JSON):",
-    JSON.stringify(ledger()),
+    JSON.stringify(ledger(caller)),
   ].join("\n");
 }
 
@@ -109,6 +136,7 @@ export default async function handler(req, res) {
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
   const picked = SPOKEN.includes(body && body.lang) ? body.lang : "kn-IN";
   const history = Array.isArray(body.history) ? body.history.slice(-6) : [];
+  const caller = LEDGERS[body.caller] ? body.caller : "lakshmi";
   const timings = {};
 
   try {
@@ -139,7 +167,7 @@ export default async function handler(req, res) {
       reasoning_effort: null,
       max_tokens: 1200,
       messages: [
-        { role: "system", content: systemPrompt(lang) },
+        { role: "system", content: systemPrompt(lang, caller) },
         ...history
           .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
           .map((m) => ({ role: m.role, content: m.content.slice(0, 600) })),
@@ -149,10 +177,16 @@ export default async function handler(req, res) {
     timings.llm_ms = Date.now() - t1;
     let reply = clean(chat.choices && chat.choices[0] && chat.choices[0].message && chat.choices[0].message.content);
     let txn = null;
-    const tag = reply.match(/^\s*\[(T\d|NONE)\]\s*/i);
+    const tag = reply.match(/^\s*\[([A-Z]\d|NONE)\]\s*/i);
     if (tag) {
       txn = tag[1].toUpperCase() === "NONE" ? null : tag[1].toUpperCase();
       reply = reply.slice(tag[0].length).trim();
+    }
+    let handoff = false;
+    const ho = reply.match(/^\s*\[HANDOFF\]\s*/i);
+    if (ho || /\[HANDOFF\]/i.test(reply)) {
+      handoff = true;
+      reply = reply.replace(/\[HANDOFF\]/gi, "").trim();
     }
     if (!reply) throw new Error(`The model returned an empty reply (finish_reason: ${chat.choices?.[0]?.finish_reason}).`);
 
@@ -165,7 +199,7 @@ export default async function handler(req, res) {
       timings.tts_ms = Date.now() - t2;
     }
 
-    return res.status(200).json({ customerText, heard, lang, txn, reply, sentences: sentences(reply), audio, timings });
+    return res.status(200).json({ customerText, heard, lang, txn, handoff, reply, sentences: sentences(reply), audio, timings });
   } catch (e) {
     return res.status(502).json({ error: "Sarvam call failed: " + e.message, timings });
   }

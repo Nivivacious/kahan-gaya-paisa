@@ -6,6 +6,7 @@ import Counter from "./rb/Counter.jsx";
 import RotatingText from "./rb/RotatingText.jsx";
 import Kite from "./Kite.jsx";
 import Journey from "./Journey.jsx";
+import Ivr from "./Ivr.jsx";
 import ApiPeek, { TURN_CALLS } from "./ApiPeek.jsx";
 import { createRecorder } from "./recorder.js";
 import { player, playQueue, stopQueue, progress, speaking as isSpeaking } from "./audio.js";
@@ -32,7 +33,7 @@ function istDate(offset) {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
-const ROWS = [
+const ROWS_LAKSHMI = [
   {
     id: "T1",
     date: istDate(-1),
@@ -82,6 +83,87 @@ const ROWS = [
     },
   },
 ];
+
+
+const ROWS_RAMESH = [
+  {
+    id: "R1",
+    date: istDate(0),
+    who: "Suresh Kumar",
+    how: "UPI, to a friend",
+    amount: 5000,
+    before: { status: "failed", label: "Failed, money debited" },
+    after: { status: "running", label: `Back by ${istDate(1)}` },
+    ask: {
+      "hi-IN": "सुरेश को भेजे पाँच हज़ार फेल हो गए, पैसा कट गया। कब वापस आएगा?",
+      "kn-IN": "ಸುರೇಶ್‌ಗೆ ಕಳಿಸಿದ ಐದು ಸಾವಿರ ಫೇಲ್ ಆಯ್ತು, ದುಡ್ಡು ಯಾವಾಗ ವಾಪಸ್?",
+      "ta-IN": "சுரேஷுக்கு அனுப்பின ஐயாயிரம் ஃபெயில் ஆச்சு, பணம் எப்போ வரும்?",
+      "te-IN": "సురేష్‌కి పంపిన ఐదు వేలు ఫెయిల్ అయింది, డబ్బు ఎప్పుడు వస్తుంది?",
+      "en-IN": "My ₹5,000 to Suresh failed but got debited. When's it back?",
+    },
+  },
+  {
+    id: "R2",
+    date: istDate(-2),
+    who: "Airtel recharge",
+    how: "UPI, to a merchant",
+    amount: 299,
+    before: { status: "failed", label: "Failed, money debited" },
+    after: { status: "running", label: `Back by ${istDate(3)}` },
+    ask: {
+      "hi-IN": "दो सौ निन्यानवे का रिचार्ज फेल हो गया, पैसा कब आएगा?",
+      "kn-IN": "ಇನ್ನೂರ ತೊಂಬತ್ತೊಂಬತ್ತು ರೂಪಾಯಿ ರೀಚಾರ್ಜ್ ಫೇಲ್ ಆಯ್ತು, ದುಡ್ಡು ಯಾವಾಗ ಬರುತ್ತೆ?",
+      "ta-IN": "இருநூத்தி தொண்ணூத்தி ஒன்பது ரீசார்ஜ் ஃபெயில் ஆச்சு, பணம் எப்போ வரும்?",
+      "te-IN": "రెండు వందల తొంభై తొమ్మిది రీఛార్జ్ ఫెయిల్ అయింది, డబ్బు ఎప్పుడు వస్తుంది?",
+      "en-IN": "My ₹299 recharge failed. When do I get it back?",
+    },
+  },
+  {
+    id: "R3",
+    date: istDate(-6),
+    who: "Salary",
+    how: "NEFT credit",
+    amount: 28000,
+    before: { status: "done", label: "Credited" },
+    after: { status: "done", label: "Credited" },
+    ask: {
+      "hi-IN": "सैलरी आ गई क्या?",
+      "kn-IN": "ಸಂಬಳ ಬಂತಾ?",
+      "ta-IN": "சம்பளம் வந்துடுச்சா?",
+      "te-IN": "జీతం వచ్చిందా?",
+      "en-IN": "Did my salary come in?",
+    },
+  },
+];
+
+const CALLERS = {
+  lakshmi: {
+    name: "Lakshmi",
+    place: "Bengaluru",
+    lang: "kn-IN",
+    account: "Savings ••4417",
+    rows: ROWS_LAKSHMI,
+    empty: "Lakshmi paid the kirana ₹1,240 yesterday. Payment failed. Money got cut. Ask like she would, or tap a payment in her passbook.",
+    pronoun: "her",
+  },
+  ramesh: {
+    name: "Ramesh",
+    place: "Delhi",
+    lang: "hi-IN",
+    account: "Savings ••8830",
+    rows: ROWS_RAMESH,
+    empty: "Ramesh sent his friend ₹5,000 this morning. It failed, but the money left. Ask like he would, or tap a payment in his passbook.",
+    pronoun: "his",
+  },
+};
+
+const ASK_PERSON = {
+  "kn-IN": "ನನಗೆ ಯಾರಾದ್ರೂ ಮನುಷ್ಯರ ಜೊತೆ ಮಾತಾಡಬೇಕು",
+  "hi-IN": "मुझे किसी इंसान से बात करनी है",
+  "ta-IN": "எனக்கு யாராவது ஒரு ஆள்கிட்ட பேசணும்",
+  "te-IN": "నాకు ఎవరైనా మనిషితో మాట్లాడాలి",
+  "en-IN": "I want to talk to a person.",
+};
 
 const STATS = [
   { value: 802, suffix: " million", text: "UPI payments a day. September 2026.", src: ["NPCI, via StartupTalky", "https://startuptalky.com/upi-transactions-september-2026/"] },
@@ -136,7 +218,11 @@ function Subtitle({ text, lang, live }) {
 }
 
 export default function App() {
+  const [callerId, setCallerId] = useState("lakshmi");
+  const caller = CALLERS[callerId];
+  const ROWS = caller.rows;
   const [lang, setLang] = useState("kn-IN");
+  const [handoff, setHandoff] = useState(null);
   const [messages, setMessages] = useState([]);
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
@@ -195,14 +281,15 @@ export default function App() {
     player(); // set up audio on this tap so the reply can autoplay
     setBusy(true);
     setTrace({ working: true, steps: [payload.audio ? "Sending your voice to Saaras v4" : "Reading the question"] });
-    if (payload.text) setMessages((m) => [...m, { role: "user", content: payload.text }]);
-    setStatus("Checking her passbook…");
+    if (payload.text) setMessages((m) => [...m, { role: "user", content: payload.text, typed: true }]);
+    setStatus(`Checking ${caller.pronoun} passbook…`);
+    setHandoff(null);
     scrollCall();
     try {
       const r = await fetch("/api/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, lang, history }),
+        body: JSON.stringify({ ...payload, lang, history, caller: callerId }),
       });
       const data = await r.json().catch(() => ({ error: "Something broke on our side. Try again." }));
       if (!r.ok) throw new Error(data.error || "Something broke. Try again.");
@@ -221,14 +308,19 @@ export default function App() {
       setTrace({ working: true, steps });
 
       let index = 0;
+      let convo = [];
       setMessages((m) => {
         const next = [
-          ...(payload.audio ? [...m, { role: "user", content: data.customerText }] : m),
-          { role: "assistant", content: data.reply, lang: data.lang },
+          ...(payload.audio ? [...m, { role: "user", content: data.customerText, heard: data.heard }] : m),
+          { role: "assistant", content: data.reply, lang: data.lang, handoff: data.handoff },
         ];
         index = next.length - 1;
+        convo = next.filter((x) => x.role === "user" || x.role === "assistant");
         return next;
       });
+      if (data.handoff) {
+        requestAnimationFrame(() => startHandoff(convo, row, steps));
+      }
       setMatched(data.txn);
       requestAnimationFrame(() =>
         speakReply(index, data.sentences, data.lang, (firstSec) => {
@@ -246,6 +338,45 @@ export default function App() {
       setBusy(false);
       scrollCall();
     }
+  }
+
+  // Hand the call to a person: Sarvam Translate puts it in English, Sarvam-105B writes the brief.
+  async function startHandoff(convo, row, steps) {
+    setHandoff({ loading: true });
+    try {
+      const r = await fetch("/api/handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer: `${caller.name}, ${caller.place}`,
+          item: row ? `${row.who}, ₹${row.amount}` : "not matched",
+          lines: convo.map((m) => ({ who: m.role === "user" ? "customer" : "bank", text: m.content })),
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Hand-off failed.");
+      setHandoff(d);
+      setTrace((tr) => ({
+        ...(tr || {}),
+        working: false,
+        steps: [...(tr?.steps || steps), `Sarvam Translate put the call in English · ${secs(d.timings.translate_ms)}`, `Sarvam-105B wrote the brief for the desk · ${secs(d.timings.llm_ms)}`],
+      }));
+      scrollCall();
+    } catch (e) {
+      setHandoff({ error: e.message });
+    }
+  }
+
+  function switchCaller(id) {
+    if (id === callerId || busy) return;
+    stopQueue();
+    setCallerId(id);
+    setLang(CALLERS[id].lang);
+    setMessages([]);
+    setMatched(null);
+    setTrace(null);
+    setHandoff(null);
+    setStatus("");
   }
 
   async function onStart() {
@@ -305,10 +436,19 @@ export default function App() {
         </div>
       </header>
 
+      <Ivr />
+
       <main className="demo" id="demo">
         <section className="call" aria-labelledby="call-h">
           <div className="call__head">
             <h2 id="call-h">Call Saathi Bank</h2>
+            <div className="callers" role="group" aria-label="Who's calling">
+              {Object.entries(CALLERS).map(([id, c]) => (
+                <button key={id} type="button" aria-pressed={callerId === id} disabled={busy} onClick={() => switchCaller(id)}>
+                  {c.name}, {c.place}
+                </button>
+              ))}
+            </div>
             <p className="call__sub">Speak any Indian language. It answers in the same one.</p>
             <div className="langs" role="group" aria-label="Language for typed and tapped questions">
               {LANGS.slice(0, 5).map(([code, native]) => (
@@ -331,17 +471,24 @@ export default function App() {
 
           <div className="call__log" ref={callRef} aria-live="polite">
             {messages.length === 0 ? (
-              <p className="call__empty">
-                Lakshmi paid the kirana ₹1,240 yesterday. Payment failed. Money got cut. Ask like she would, or tap a payment in
-                her passbook.
-              </p>
+              <p className="call__empty">{caller.empty}</p>
             ) : (
               messages.map((m, i) =>
                 m.role === "error" ? (
                   <p key={i} className="line line--err" role="alert">{m.content}</p>
                 ) : (
                   <div key={i} className={`line line--${m.role === "user" ? "me" : "bank"}`} data-old={i < messages.length - 2 ? "" : undefined}>
-                    <span className="line__who">{m.role === "user" ? "Lakshmi" : "Saathi Bank"}</span>
+                    <span className="line__who">
+                      {m.role === "user" ? caller.name : "Saathi Bank"}
+                      {m.role === "user" && m.heard?.language && (
+                        <span className="chip">
+                          Saaras heard {LANG_NAME[m.heard.language] || m.heard.language}
+                          {m.heard.confidence != null ? `, ${Math.round(m.heard.confidence * 100)}% sure` : ""}
+                        </span>
+                      )}
+                      {m.role === "user" && m.typed && <span className="chip chip--quiet">Typed</span>}
+                      {m.role === "assistant" && m.lang && <span className="chip">Replied in {LANG_NAME[m.lang]}</span>}
+                    </span>
                     {m.role === "assistant" ? (
                       <>
                         <Subtitle text={m.content} lang={m.lang} live={i === lastBank} />
@@ -353,6 +500,29 @@ export default function App() {
                   </div>
                 )
               )
+            )}
+            {handoff && (
+              <div className="handoff" aria-live="polite">
+                <span className="handoff__tag">Handed to a person</span>
+                {handoff.loading ? (
+                  <p className="handoff__brief">Writing the brief for the support desk…</p>
+                ) : handoff.error ? (
+                  <p className="handoff__brief">{handoff.error}</p>
+                ) : (
+                  <>
+                    <p className="handoff__brief">{handoff.brief}</p>
+                    <ol className="handoff__lines">
+                      {handoff.lines.map((l, i) => (
+                        <li key={i}>
+                          <span>{l.who === "customer" ? caller.name : "Bot"}</span>
+                          {l.english || l.text}
+                        </li>
+                      ))}
+                    </ol>
+                    <small>What the desk sees, in English, translated by Sarvam Translate (Mayura).</small>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
@@ -387,13 +557,16 @@ export default function App() {
             <input id="typed" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Or type it" />
             <button type="submit" disabled={busy}>Ask</button>
           </form>
+          <button type="button" className="call__person" disabled={busy} onClick={() => ask({ text: ASK_PERSON[lang] || ASK_PERSON["en-IN"] })}>
+            Ask for a person
+          </button>
         </section>
 
         <aside className="side">
           <section className="passbook" aria-labelledby="pb-h">
             <div className="passbook__band">
-              <h2 id="pb-h">Lakshmi's passbook</h2>
-              <span>Savings ••4417. Sample data.</span>
+              <h2 id="pb-h">{caller.name}'s passbook</h2>
+              <span>{caller.account}. Sample data.</span>
             </div>
             <div className="passbook__cols" aria-hidden="true">
               <span>Date</span>

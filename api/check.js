@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import turn from "./turn.js";
 import audit from "./audit.js";
 import speakHandler from "./speak.js";
+import handoffHandler from "./handoff.js";
 
 // Only the SHA-256 of the token lives in the repo.
 const TOKEN_HASH = "d53b03c51cab20d0d77df23f3c8bd310ef36a4a5a8917ea63bdfdded05c7c1b5";
@@ -28,6 +29,12 @@ export default async function handler(req, res) {
   if (!ok) return res.status(200).json({ ok: false, error: "bad or missing token" });
   try {
 
+  if (u.searchParams.get("step") === "ramesh") {
+    const a = await call({ caller: "ramesh", lang: "hi-IN", text: "सुरेश को भेजे पाँच हज़ार फेल हो गए, पैसा कट गया। कब वापस आएगा?" });
+    const b = await call({ caller: "ramesh", lang: "hi-IN", text: "मुझे किसी इंसान से बात करनी है", history: [{ role: "user", content: "सुरेश को भेजे पाँच हज़ार फेल हो गए" }, { role: "assistant", content: a.reply || "" }] });
+    const h = await call({ customer: "Ramesh, Delhi", item: "Suresh Kumar, ₹5000", lines: [{ who: "customer", text: "सुरेश को भेजे पाँच हज़ार फेल हो गए, पैसा कट गया। कब वापस आएगा?" }, { who: "bank", text: a.reply || "" }, { who: "customer", text: "मुझे किसी इंसान से बात करनी है" }, { who: "bank", text: b.reply || "" }] }, handoffHandler);
+    return res.status(200).json({ first: { status: a.status, error: a.error, txn: a.txn, handoff: a.handoff, reply: a.reply, timings: a.timings }, person: { status: b.status, error: b.error, txn: b.txn, handoff: b.handoff, reply: b.reply }, handoff: h });
+  }
   if (u.searchParams.get("step") === "speak") {
     const parts = ["ಸಾರಿ ಲಕ್ಷ್ಮಿ ಅವರೇ.", "ನಿನ್ನೆ ಶ್ರೀ ಗಣೇಶ್ ಅಂಗಡಿಗೆ ಮಾಡಿದ UPI ಪೇಮೆಂಟ್ ತಲುಪಿಲ್ಲ.", "ಹಣ ಇಪ್ಪತ್ತೈದನೇ ತಾರೀಖಿನ ಒಳಗೆ ವಾಪಸ್ ಬರುತ್ತೆ."];
     const t0 = Date.now();
