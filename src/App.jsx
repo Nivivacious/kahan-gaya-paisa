@@ -77,7 +77,7 @@ const STATS = [
   {
     value: 802,
     suffix: " million",
-    text: "UPI payments a day in September 2026.",
+    text: "UPI payments a day. September 2026.",
     src: ["NPCI, via StartupTalky", "https://startuptalky.com/upi-transactions-september-2026/"],
   },
   {
@@ -85,20 +85,20 @@ const STATS = [
     decimals: 1,
     prefix: "",
     suffix: "–0.8%",
-    text: "of them fail for technical reasons. Small as a share, but at today's volume that's millions of payments a day.",
+    text: "fail on the tech side. That's millions of payments, every day.",
     src: ["NPCI CEO, Nov 2024, via Inc42", "https://inc42.com/buzz/technical-glitches-on-upi-have-fallen-below-1"],
   },
   {
     value: 152157,
     suffix: "",
-    text: "internet and mobile banking complaints at Canara Bank in FY26. Its biggest category, at one bank.",
+    text: "digital banking complaints at one bank, Canara, in FY26. Its biggest pile.",
     src: ["Canara Bank disclosure", "https://www.canarabank.bank.in/documents/d/guest/disclosure-20of-20complaints-202025-26"],
   },
   {
     value: 10.6,
     decimals: 1,
     suffix: "%",
-    text: "of Indians speak English at all, according to the last census. Support has to work in the language people think in.",
+    text: "of Indians speak English. The rest still get \"Press 1 for English.\"",
     src: ["Census 2011", "https://en.wikipedia.org/wiki/Multilingualism_in_India"],
   },
 ];
@@ -134,14 +134,14 @@ export default function App() {
     if (!b64) return;
     player.current?.pause();
     player.current = new Audio("data:audio/mpeg;base64," + b64);
-    player.current.play().catch(() => setStatus("Tap play on the reply to hear it."));
+    player.current.play().catch(() => setStatus("Tap Play again to hear it."));
   }
 
   async function ask(payload) {
     setBusy(true);
-    setTrace({ working: true, steps: [payload.audio ? "Sending your voice to Saaras v4" : "Reading your question"] });
+    setTrace({ working: true, steps: [payload.audio ? "Sending your voice to Saaras v4" : "Reading the question"] });
     if (payload.text) setMessages((m) => [...m, { role: "user", content: payload.text }]);
-    setStatus(payload.audio ? "Listening back…" : "Checking the passbook…");
+    setStatus("Checking her passbook…");
     scrollCall();
     try {
       const r = await fetch("/api/turn", {
@@ -149,8 +149,8 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...payload, lang, history }),
       });
-      const data = await r.json().catch(() => ({ error: "The server sent back something unexpected." }));
-      if (!r.ok) throw Object.assign(new Error(data.error || "Something went wrong."), { timings: data.timings });
+      const data = await r.json().catch(() => ({ error: "Something broke on our side. Try again." }));
+      if (!r.ok) throw Object.assign(new Error(data.error || "Something broke. Try again."), { timings: data.timings });
 
       const t = data.timings || {};
       const row = ROWS.find((x) => x.id === data.txn);
@@ -171,7 +171,7 @@ export default function App() {
       setMatched(data.txn);
       setTrace({ working: false, steps, elapsed: total / 1000 });
       play(data.audio);
-      setStatus("Ask a follow-up, or try another language.");
+      setStatus("Ask a follow-up. Or switch language.");
     } catch (e) {
       setMessages((m) => [...m, { role: "error", content: e.message }]);
       setTrace(null);
@@ -185,13 +185,13 @@ export default function App() {
   async function onStart() {
     player.current?.pause();
     setListening(true);
-    setStatus("Listening. Tap again when you're done.");
+    setStatus("Listening. Tap again to send.");
     try {
       recorder.current = createRecorder();
       await recorder.current.start();
     } catch {
       setListening(false);
-      setStatus("The microphone is blocked. Allow it in your browser, or type your question below.");
+      setStatus("Mic's blocked. Allow it, or type below.");
     }
   }
 
@@ -202,15 +202,15 @@ export default function App() {
     if (!rec) return;
     if (reason === "cancel" || reason === "escape" || reason === "mic-denied" || reason === "unmount") {
       rec.cancel();
-      setStatus(reason === "mic-denied" ? "The microphone is blocked. Type your question below instead." : "Cancelled.");
+      setStatus(reason === "mic-denied" ? "Mic's blocked. Type below instead." : "Cancelled.");
       return;
     }
     try {
       const audio = await rec.stop();
-      if (!audio) return setStatus("That was very short. Tap the mic and speak for a couple of seconds.");
+      if (!audio) return setStatus("Too short. Try again.");
       ask({ audio });
     } catch {
-      setStatus("Couldn't read that recording. Try again, or type instead.");
+      setStatus("Couldn't hear that. Try again, or type it.");
     }
   }
 
@@ -231,12 +231,11 @@ export default function App() {
             />
           </p>
           <p className="hero__lede">
-            Your UPI payment failed, but the money left your account anyway. You call the bank and a recorded voice asks you
-            to press 1 for English. This helpline listens in the language you speak, finds the payment, and tells you out loud when the
-            money comes back.
+            The UPI payment failed. The money left anyway. Ask about it in your own language, and hear when it's coming
+            back.
           </p>
           <p className="hero__built">
-            Built on Sarvam's <b>Saaras v4</b>, <b>Sarvam-105B</b> and <b>Bulbul v3</b> by Nivedita Prabhu.
+            A demo on Sarvam's <b>Saaras v4</b>, <b>Sarvam-105B</b> and <b>Bulbul v3</b>. By Nivedita Prabhu.
           </p>
         </div>
         <div className="hero__kite" aria-hidden="false">
@@ -248,14 +247,13 @@ export default function App() {
         <section className="call" aria-labelledby="call-h">
           <div className="call__head">
             <h2 id="call-h">Call Saathi Bank</h2>
-            <p>Speak in any Indian language. Saaras works out which one, and the answer comes back in it.</p>
+            <p>Speak any Indian language. It answers in the same one.</p>
           </div>
 
           <div className="call__log" ref={callRef} aria-live="polite">
             {messages.length === 0 ? (
               <p className="call__empty">
-                Lakshmi paid ₹1,240 at the kirana yesterday. The payment failed, but the money left her account. Ask
-                about it the way she would.
+                Lakshmi paid the kirana ₹1,240 yesterday. Payment failed. Money got cut. Ask like she would.
               </p>
             ) : (
               messages.map((m, i) =>
@@ -293,7 +291,7 @@ export default function App() {
               onStart={onStart}
               onStop={onStop}
             />
-            <p className="call__status" role="status">{status || "Tap to speak, or hold and slide left to cancel."}</p>
+            <p className="call__status" role="status">{status || "Tap to talk. Hold and slide left to cancel."}</p>
           </div>
 
           <form
@@ -306,8 +304,8 @@ export default function App() {
               ask({ text: t });
             }}
           >
-            <label className="sr" htmlFor="typed">Type your question</label>
-            <input id="typed" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Or type your question" />
+            <label className="sr" htmlFor="typed">Type a question</label>
+            <input id="typed" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Or type it" />
             <select aria-label="Language for typed questions" value={lang} onChange={(e) => setLang(e.target.value)}>
               {LANGS.map(([code, native]) => (
                 <option key={code} value={code}>{native}</option>
@@ -327,7 +325,7 @@ export default function App() {
         <aside className="side">
           <section className="passbook" aria-labelledby="pb-h">
             <h2 id="pb-h">Lakshmi's passbook</h2>
-            <p className="passbook__sub">Savings ••4417, Bengaluru. Sample data, not a real account.</p>
+            <p className="passbook__sub">Savings ••4417. Sample data.</p>
             <ol className="passbook__rows">
               {ROWS.map((r) => {
                 const on = matched === r.id;
@@ -365,7 +363,7 @@ export default function App() {
             {trace ? (
               <ThoughtLine
                 key={trace.working ? "w" : "d" + trace.elapsed}
-                label="Working on it"
+                label="Working"
                 doneLabel="Answered in"
                 glyph="dot"
                 steps={trace.steps}
@@ -377,14 +375,14 @@ export default function App() {
                 glyphColor="var(--kite)"
               />
             ) : (
-              <p className="trace__empty">Each answer takes three Sarvam calls. Their timings show up here, measured on the server.</p>
+              <p className="trace__empty">Three Sarvam calls per answer. Timings land here.</p>
             )}
           </section>
         </aside>
       </main>
 
       <section className="why" aria-labelledby="why-h">
-        <h2 id="why-h">Why build this</h2>
+        <h2 id="why-h">Why this</h2>
         <ul className="why__grid">
           {STATS.map((s) => (
             <li key={s.text}>
@@ -404,22 +402,21 @@ export default function App() {
           ))}
         </ul>
         <p className="why__gap">
-          NPCI is working on this too. Its <a href="https://yourstory.com/2026/09/bhim-myupi-9-upi-services-ai-assistant" target="_blank" rel="noreferrer">BHIM MyUPI</a> assistant
-          takes complaints by chat, in English, Hindi, Telugu, Tamil and Bengali. A Kannada speaker who'd rather call than
-          type is still waiting. That's the gap a bank can close with Sarvam.
+          NPCI's new <a href="https://yourstory.com/2026/09/bhim-myupi-9-upi-services-ai-assistant" target="_blank" rel="noreferrer">BHIM MyUPI</a> takes
+          complaints by chat, in five languages. Kannada isn't one. Everyone else is still on hold.
         </p>
       </section>
 
       <footer className="foot">
         <p>
-          Saathi Bank is fictional and the passbook is sample data. Reversal dates follow RBI's{" "}
-          <a href="https://www.rbi.org.in/scripts/NotificationUser.aspx?Id=11693" target="_blank" rel="noreferrer">turnaround-time rules</a>:
-          T+5 days for a failed UPI payment to a shop, T+1 for one to a person, and ₹100 a day owed after that. Your voice
-          goes to Sarvam's APIs to be transcribed and isn't stored here.
+          Saathi Bank is made up. So is the passbook. Reversal dates follow{" "}
+          <a href="https://www.rbi.org.in/scripts/NotificationUser.aspx?Id=11693" target="_blank" rel="noreferrer">RBI rules</a>: T+5
+          days for a failed UPI payment to a shop, T+1 to a person, then ₹100 a day for any delay. Your voice goes to Sarvam to be
+          transcribed. Nothing is stored here.
         </p>
         <p>
-          Interface pieces adapted from <a href="https://reactbits.dev" target="_blank" rel="noreferrer">React Bits</a>.{" "}
-          <a href="https://github.com/Nivivacious/kahan-gaya-paisa" target="_blank" rel="noreferrer">Source on GitHub</a>.
+          UI bits from <a href="https://reactbits.dev" target="_blank" rel="noreferrer">React Bits</a>. Code on{" "}
+          <a href="https://github.com/Nivivacious/kahan-gaya-paisa" target="_blank" rel="noreferrer">GitHub</a>.
         </p>
       </footer>
     </div>

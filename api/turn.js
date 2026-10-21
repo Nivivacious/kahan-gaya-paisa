@@ -98,7 +98,7 @@ function clean(s) {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Use POST" });
   if (!process.env.SARVAM_API_KEY) {
-    return res.status(503).json({ error: "This demo needs a Sarvam API key. The owner adds it as SARVAM_API_KEY in Vercel." });
+    return res.status(503).json({ error: "Demo's offline. No Sarvam key set." });
   }
 
   let body = req.body;
@@ -118,10 +118,10 @@ export default async function handler(req, res) {
       customerText = stt.transcript || "";
       heard = { language: stt.language_code || null, confidence: stt.language_probability ?? null };
       if (!customerText.trim()) {
-        return res.status(422).json({ error: "Didn't catch that. Tap the mic and speak for a couple of seconds.", timings });
+        return res.status(422).json({ error: "Didn't catch that. Try again.", timings });
       }
     }
-    if (!customerText.trim()) return res.status(400).json({ error: "Say or type a question first." });
+    if (!customerText.trim()) return res.status(400).json({ error: "Say or type something first." });
 
     // Reply in the language the caller actually spoke, if Bulbul can voice it.
     const lang = heard && SPOKEN.includes(heard.language) ? heard.language : picked;
