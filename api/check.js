@@ -4,18 +4,19 @@
 // Returns only text and timings, never audio or keys.
 import { createHash } from "node:crypto";
 import turn from "./turn.js";
+import audit from "./audit.js";
 
 // Only the SHA-256 of the token lives in the repo.
 const TOKEN_HASH = "d53b03c51cab20d0d77df23f3c8bd310ef36a4a5a8917ea63bdfdded05c7c1b5";
 
-function call(body) {
+function call(body, fn = turn) {
   return new Promise((resolve) => {
     const res = {
       code: 200,
       status(c) { this.code = c; return this; },
       json(j) { resolve({ status: this.code, ...j }); },
     };
-    turn({ method: "POST", body }, res);
+    fn({ method: "POST", body }, res);
   });
 }
 
@@ -26,6 +27,10 @@ export default async function handler(req, res) {
   if (!ok) return res.status(200).json({ ok: false, error: "bad or missing token" });
   try {
 
+  if (u.searchParams.get("step") === "audit") {
+    const a = await call({ sample: u.searchParams.get("sample") || "B" }, audit);
+    return res.status(200).json({ ...a, audio: a.audio ? a.audio.length : 0 });
+  }
   const typed = await call({ lang: "kn-IN", text: "ನಿನ್ನೆ ಅಂಗಡಿಗೆ UPI ಮಾಡಿದೆ, ಫೇಲ್ ಆಯ್ತು ಆದರೆ ದುಡ್ಡು ಕಟ್ ಆಗಿದೆ" });
   const out = {
     typed: {

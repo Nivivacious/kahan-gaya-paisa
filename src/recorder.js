@@ -48,7 +48,7 @@ export function createRecorder() {
   };
 }
 
-async function toWavBase64(blob) {
+export async function toWavBase64(blob) {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   const ctx = new Ctx();
   const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
