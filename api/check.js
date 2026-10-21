@@ -5,6 +5,7 @@
 import { createHash } from "node:crypto";
 import turn from "./turn.js";
 import audit from "./audit.js";
+import speakHandler from "./speak.js";
 
 // Only the SHA-256 of the token lives in the repo.
 const TOKEN_HASH = "d53b03c51cab20d0d77df23f3c8bd310ef36a4a5a8917ea63bdfdded05c7c1b5";
@@ -27,6 +28,12 @@ export default async function handler(req, res) {
   if (!ok) return res.status(200).json({ ok: false, error: "bad or missing token" });
   try {
 
+  if (u.searchParams.get("step") === "speak") {
+    const parts = ["ಸಾರಿ ಲಕ್ಷ್ಮಿ ಅವರೇ.", "ನಿನ್ನೆ ಶ್ರೀ ಗಣೇಶ್ ಅಂಗಡಿಗೆ ಮಾಡಿದ UPI ಪೇಮೆಂಟ್ ತಲುಪಿಲ್ಲ.", "ಹಣ ಇಪ್ಪತ್ತೈದನೇ ತಾರೀಖಿನ ಒಳಗೆ ವಾಪಸ್ ಬರುತ್ತೆ."];
+    const t0 = Date.now();
+    const outs = await Promise.all(parts.map((text) => call({ text, lang: "kn-IN" }, speakHandler).then((r) => ({ ...r, at: Date.now() - t0 }))));
+    return res.status(200).json(outs.map((o) => ({ status: o.status, error: o.error, tts_ms: o.tts_ms, done_at_ms: o.at, audio: o.audio ? o.audio.length : 0 })));
+  }
   if (u.searchParams.get("step") === "audit") {
     const a = await call({ sample: u.searchParams.get("sample") || "B" }, audit);
     return res.status(200).json({ ...a, audio: a.audio ? a.audio.length : 0 });
