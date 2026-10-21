@@ -14,6 +14,19 @@ Live demo: https://kahan-gaya-paisa.vercel.app
 - 10.6% of Indians speak English at all (Census 2011).
 - NPCI's BHIM MyUPI assistant now takes complaints by chat in five languages ([YourStory](https://yourstory.com/2026/09/bhim-myupi-9-upi-services-ai-assistant)). Voice, and the other languages, are still open.
 
+## Second demo: Hear every call
+
+https://kahan-gaya-paisa.vercel.app/calls/
+
+From 1 January 2027, RBI's recovery directions require every loan recovery call to be recorded, kept six months, and the borrower told. This audits those calls.
+
+1. Sample calls are scripts voiced by **Bulbul v3** in two voices, so there's real audio.
+2. The call is split at pauses; each piece is transcribed by **Saaras v4** in parallel, giving per-turn timestamps.
+3. Each piece's voice pitch is grouped into two voices, a light stand-in for diarization that tells the model who's speaking.
+4. **Sarvam-105B** checks seven rules: calling hours, recording notice, agent identity, threats, third-party pressure, misleading claims, and backing off during emergencies. It quotes where each failure happens and pulls out any promise to pay.
+
+Files: `api/audit.js`, `src/calls/`.
+
 ## How a turn works
 
 1. **Saaras v4** transcribes the caller with `language_code: unknown`, so it detects the language itself. `keyterms` bias it toward payments words like UPI, UTR and ARN.
