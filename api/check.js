@@ -2,7 +2,11 @@
 // Runs two real turns: a typed Kannada question (Sarvam-105B -> Bulbul), then feeds
 // Bulbul's own audio back in as a "caller" (Saaras -> Sarvam-105B -> Bulbul).
 // Returns only text and timings, never audio or keys.
+import { createHash } from "node:crypto";
 import turn from "./turn.js";
+
+// Only the SHA-256 of the token lives in the repo.
+const TOKEN_HASH = "d53b03c51cab20d0d77df23f3c8bd310ef36a4a5a8917ea63bdfdded05c7c1b5";
 
 function call(body) {
   return new Promise((resolve) => {
@@ -16,9 +20,8 @@ function call(body) {
 }
 
 export default async function handler(req, res) {
-  const token = process.env.CHECK_TOKEN;
   const given = (req.query && req.query.t) || new URL(req.url, "http://x").searchParams.get("t");
-  if (!token || given !== token) return res.status(200).json({ ok: false, error: "bad or missing token" });
+  if (!given || createHash("sha256").update(String(given)).digest("hex") !== TOKEN_HASH) return res.status(200).json({ ok: false, error: "bad or missing token" });
   try {
 
   const typed = await call({ lang: "kn-IN", text: "ನಿನ್ನೆ ಅಂಗಡಿಗೆ UPI ಮಾಡಿದೆ, ಫೇಲ್ ಆಯ್ತು ಆದರೆ ದುಡ್ಡು ಕಟ್ ಆಗಿದೆ" });
