@@ -1,4 +1,12 @@
 {
   "framework": "vite",
-  "regions": ["bom1"]
+  "regions": [
+    "bom1"
+  ],
+  "rewrites": [
+    {
+      "source": "/api/check/:pass",
+      "destination": "/api/check?pass=:pass"
+    }
+  ]
 }
