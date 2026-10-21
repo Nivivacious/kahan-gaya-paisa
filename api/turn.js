@@ -16,7 +16,7 @@ const KEYTERMS = ["UPI", "UTR", "ARN", "refund", "reversal", "Saathi Bank", "Sri
 
 function istDate(offsetDays) {
   const d = new Date(Date.now() + 5.5 * 3600 * 1000 + offsetDays * 86400 * 1000);
-  return d.toISOString().slice(0, 10);
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "long", weekday: "long", timeZone: "UTC" }); // e.g. "Friday, 23 October"
 }
 
 const LEDGERS = {
