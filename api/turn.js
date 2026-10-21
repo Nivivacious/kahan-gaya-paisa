@@ -159,6 +159,7 @@ export default async function handler(req, res) {
       model: "bulbul:v3",
       speaker: "priya",
       pace: 1.05,
+      output_audio_codec: "mp3", // about a tenth the size of WAV, so the answer starts playing sooner
     });
     timings.tts_ms = Date.now() - t2;
 

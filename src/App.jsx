@@ -133,7 +133,7 @@ export default function App() {
   function play(b64) {
     if (!b64) return;
     player.current?.pause();
-    player.current = new Audio("data:audio/wav;base64," + b64);
+    player.current = new Audio("data:audio/mpeg;base64," + b64);
     player.current.play().catch(() => setStatus("Tap play on the reply to hear it."));
   }
 
