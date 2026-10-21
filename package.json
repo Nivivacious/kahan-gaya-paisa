@@ -1,0 +1,5 @@
+{
+  "name": "kahan-gaya-paisa",
+  "private": true,
+  "engines": { "node": "22.x" }
+}
