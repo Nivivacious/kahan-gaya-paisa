@@ -17,7 +17,9 @@ function call(body) {
 
 export default async function handler(req, res) {
   const token = process.env.CHECK_TOKEN;
-  if (!token || req.query.t !== token) return res.status(404).json({ error: "Not found" });
+  const given = (req.query && req.query.t) || new URL(req.url, "http://x").searchParams.get("t");
+  if (!token || given !== token) return res.status(200).json({ ok: false, error: "bad or missing token" });
+  try {
 
   const typed = await call({ lang: "kn-IN", text: "ನಿನ್ನೆ ಅಂಗಡಿಗೆ UPI ಮಾಡಿದೆ, ಫೇಲ್ ಆಯ್ತು ಆದರೆ ದುಡ್ಡು ಕಟ್ ಆಗಿದೆ" });
   const out = {
@@ -32,7 +34,7 @@ export default async function handler(req, res) {
     },
   };
 
-  if (typed.audio && req.query.step === "voice") {
+  if (typed.audio && (req.query && req.query.step) === "voice") {
     const spoken = await call({ lang: "hi-IN", audio: typed.audio });
     out.voice = {
       status: spoken.status,
@@ -47,6 +49,9 @@ export default async function handler(req, res) {
     };
   }
   res.status(200).json(out);
+  } catch (e) {
+    res.status(200).json({ ok: false, crashed: String(e && e.stack || e).slice(0, 800) });
+  }
 }
 
 export const config = { maxDuration: 60 };
