@@ -21,7 +21,7 @@ function call(body) {
 
 export default async function handler(req, res) {
   const given = (req.query && req.query.t) || new URL(req.url, "http://x").searchParams.get("t");
-  if (!given || createHash("sha256").update(String(given)).digest("hex") !== TOKEN_HASH) return res.status(200).json({ ok: false, error: "bad or missing token" });
+  if (!given || createHash("sha256").update(String(given)).digest("hex") !== TOKEN_HASH) return res.status(200).json({ ok: false, error: "bad or missing token", got: given ? String(given).length + ":" + String(given).slice(0, 3) : null, url: String(req.url).replace(/t=[^&]*/, "t=…") });
   try {
 
   const typed = await call({ lang: "kn-IN", text: "ನಿನ್ನೆ ಅಂಗಡಿಗೆ UPI ಮಾಡಿದೆ, ಫೇಲ್ ಆಯ್ತು ಆದರೆ ದುಡ್ಡು ಕಟ್ ಆಗಿದೆ" });
