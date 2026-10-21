@@ -349,7 +349,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customer: `${caller.name}, ${caller.place}`,
-          item: row ? `${row.who}, ₹${row.amount}` : "not matched",
+          item: row ? `${row.who}, ₹${row.amount}, ${row.how}. Status: ${row.after.label}` : "not matched",
           lines: convo.map((m) => ({ who: m.role === "user" ? "customer" : "bank", text: m.content })),
         }),
       });

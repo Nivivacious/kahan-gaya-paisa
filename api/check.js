@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (u.searchParams.get("step") === "ramesh") {
     const a = await call({ caller: "ramesh", lang: "hi-IN", text: "सुरेश को भेजे पाँच हज़ार फेल हो गए, पैसा कट गया। कब वापस आएगा?" });
     const b = await call({ caller: "ramesh", lang: "hi-IN", text: "मुझे किसी इंसान से बात करनी है", history: [{ role: "user", content: "सुरेश को भेजे पाँच हज़ार फेल हो गए" }, { role: "assistant", content: a.reply || "" }] });
-    const h = await call({ customer: "Ramesh, Delhi", item: "Suresh Kumar, ₹5000", lines: [{ who: "customer", text: "सुरेश को भेजे पाँच हज़ार फेल हो गए, पैसा कट गया। कब वापस आएगा?" }, { who: "bank", text: a.reply || "" }, { who: "customer", text: "मुझे किसी इंसान से बात करनी है" }, { who: "bank", text: b.reply || "" }] }, handoffHandler);
+    const h = await call({ customer: "Ramesh, Delhi", item: "Suresh Kumar, ₹5000, UPI, to a friend. Status: Back by tomorrow", lines: [{ who: "customer", text: "सुरेश को भेजे पाँच हज़ार फेल हो गए, पैसा कट गया। कब वापस आएगा?" }, { who: "bank", text: a.reply || "" }, { who: "customer", text: "मुझे किसी इंसान से बात करनी है" }, { who: "bank", text: b.reply || "" }] }, handoffHandler);
     return res.status(200).json({ first: { status: a.status, error: a.error, txn: a.txn, handoff: a.handoff, reply: a.reply, timings: a.timings }, person: { status: b.status, error: b.error, txn: b.txn, handoff: b.handoff, reply: b.reply }, handoff: h });
   }
   if (u.searchParams.get("step") === "speak") {

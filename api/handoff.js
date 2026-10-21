@@ -42,7 +42,7 @@ export default async function handler(req, res) {
           role: "user",
           content: [
             "A voice bot at Saathi Bank (fictional) is handing a customer to a human support agent.",
-            "Write the brief the human reads before picking up: at most two short plain-English sentences. Say what the customer wants and the one thing to do first. No greeting, no bullet points.",
+            "Write the brief the human reads before picking up: at most two short plain-English sentences. Say what the customer wants and the one thing to do first. Use only facts in the passbook item and the call; failed UPI debits reverse automatically, so never tell the agent to start a refund. No greeting, no bullet points.",
             `Customer: ${body.customer || "the customer"}. Passbook item: ${body.item || "unknown"}.`,
             "Call so far, translated to English:",
             translated.map((l) => `${l.who}: ${l.english || l.text}`).join("\n"),

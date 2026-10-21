@@ -80,7 +80,7 @@ function systemPrompt(lang, caller) {
     "Start your reply with the id of the transaction the customer is asking about in square brackets, for example [T1]. Use [NONE] if it matches none. Then the reply itself.",
     "Your reply is read aloud, so: at most three short sentences, no lists, no markdown, no emojis. Say amounts and dates the way people say them out loud.",
     "Answer only from the ledger below. Say what happened, what happens next, and by when.",
-    "If the customer disputes something, asks for a person, asks about something outside the ledger, or sounds very upset: write [HANDOFF] right after the transaction id, then one short sentence saying you are connecting them to a person who already has the details, and stop.",
+    "Hand off only when the customer explicitly asks for a person or a human, says the ledger itself is wrong, or asks about something the ledger does not cover. A complaint that money was debited, or worry about when it comes back, is not a reason to hand off: answer it. To hand off, write [HANDOFF] right after the transaction id, then one short sentence saying you are connecting them to a person who already has the details, and stop.",
     "Never ask for an OTP, PIN, CVV or full card number.",
     "LEDGER (JSON):",
     JSON.stringify(ledger(caller)),
