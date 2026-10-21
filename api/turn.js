@@ -130,7 +130,10 @@ export default async function handler(req, res) {
     const chat = await sarvamJSON("/v1/chat/completions", {
       model: "sarvam-105b",
       temperature: 0.3,
-      max_tokens: 800,
+      // Reasoning tokens count toward max_tokens and can leave the reply empty.
+      // A three-sentence spoken answer from a fixed ledger doesn't need them.
+      reasoning_effort: null,
+      max_tokens: 1200,
       messages: [
         { role: "system", content: systemPrompt(lang) },
         ...history
@@ -147,7 +150,7 @@ export default async function handler(req, res) {
       txn = tag[1].toUpperCase() === "NONE" ? null : tag[1].toUpperCase();
       reply = reply.slice(tag[0].length).trim();
     }
-    if (!reply) throw new Error("The model returned an empty reply.");
+    if (!reply) throw new Error(`The model returned an empty reply (finish_reason: ${chat.choices?.[0]?.finish_reason}).`);
 
     const t2 = Date.now();
     const tts = await sarvamJSON("/text-to-speech", {
