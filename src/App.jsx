@@ -252,6 +252,10 @@ export default function App() {
 
   return (
     <div className="page">
+      <nav className="hc-nav">
+        <span aria-current="page">Kahan gaya paisa?</span>
+        <a href="/calls/">Hear every call</a>
+      </nav>
       <header className="hero">
         <div className="hero__text">
           <h1>Kahan gaya paisa?</h1>

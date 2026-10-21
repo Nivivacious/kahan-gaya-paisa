@@ -45,6 +45,11 @@ button, input, select { font: inherit; color: inherit; }
 
 .page { max-width: 1140px; margin: 0 auto; padding: 40px 20px 64px; }
 
+.hc-nav { display: flex; gap: 22px; font-size: 14px; margin-bottom: 40px; }
+.hc-nav a { color: var(--ink-2); text-decoration: none; }
+.hc-nav a:hover { color: var(--kite); }
+.hc-nav [aria-current] { color: var(--ink); font-weight: 600; }
+
 /* ---------- hero ---------- */
 .hero {
   display: grid;
@@ -257,3 +262,6 @@ h2 { font-weight: 640; font-size: 21px; letter-spacing: -0.015em; margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   .track__coin, .word, .row, .line { transition: none !important; animation: none !important; }
 }
+
+/* let long trace steps wrap on phones */
+.thought-line__step, .thought-line__step-text { white-space: normal; overflow-wrap: anywhere; }
