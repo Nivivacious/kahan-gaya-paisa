@@ -118,7 +118,6 @@ async function transcribe(wav) {
   form.append("model", "saaras:v4");
   form.append("mode", "transcribe");
   form.append("language_code", "unknown");
-  form.append("with_timestamps", "true");
   form.append("keyterms", JSON.stringify(["EMI", "Saathi Finance", "UPI", "NACH", "police", "late fee"]));
   const r = await fetch(BASE + "/speech-to-text", {
     method: "POST",
@@ -130,12 +129,67 @@ async function transcribe(wav) {
   return JSON.parse(text);
 }
 
-function segmentsOf(stt) {
-  const t = stt.timestamps;
-  if (t && Array.isArray(t.words) && t.words.length) {
-    return t.words.map((w, i) => ({ i, text: String(w).trim(), start: t.start_time_seconds?.[i] ?? null, end: t.end_time_seconds?.[i] ?? null }));
+// Split the call at pauses (simple energy VAD), so each turn gets its own timestamp.
+function splitAtPauses(pcm) {
+  const frame = Math.round(RATE * 0.02); // 20 ms
+  const n = Math.floor(pcm.length / 2 / frame);
+  const energy = new Float64Array(n);
+  let peak = 0;
+  for (let f = 0; f < n; f++) {
+    let s = 0;
+    for (let k = 0; k < frame; k++) {
+      const v = pcm.readInt16LE((f * frame + k) * 2) / 32768;
+      s += v * v;
+    }
+    energy[f] = Math.sqrt(s / frame);
+    if (energy[f] > peak) peak = energy[f];
   }
-  return [{ i: 0, text: stt.transcript || "", start: 0, end: null }];
+  const thr = Math.max(0.01, peak * 0.06);
+  const minGap = 14; // 280 ms of quiet ends a segment
+  const segs = [];
+  let start = -1;
+  let quiet = 0;
+  for (let f = 0; f < n; f++) {
+    if (energy[f] > thr) {
+      if (start < 0) start = f;
+      quiet = 0;
+    } else if (start >= 0 && ++quiet >= minGap) {
+      segs.push([start, f - quiet + 1]);
+      start = -1;
+      quiet = 0;
+    }
+  }
+  if (start >= 0) segs.push([start, n]);
+  // Drop blips, merge very short pieces into their neighbour, cap the count.
+  const merged = [];
+  for (const [a, b] of segs) {
+    if (b - a < 10) continue;
+    const last = merged[merged.length - 1];
+    if (last && (b - a < 15 || merged.length >= 14)) last[1] = b;
+    else merged.push([a, b]);
+  }
+  const pad = 6;
+  return merged.map(([a, b]) => {
+    const s0 = Math.max(0, a - pad) * frame;
+    const s1 = Math.min(n, b + pad) * frame;
+    return { start: (s0 / RATE), end: (s1 / RATE), pcm: pcm.subarray(s0 * 2, s1 * 2) };
+  });
+}
+
+async function transcribeCall(wav) {
+  const pcm = pcmOf(wav);
+  const pieces = splitAtPauses(pcm);
+  if (!pieces.length) return { segments: [], language: null };
+  const results = await Promise.all(pieces.map((p) => transcribe(wavOf(p.pcm)).catch(() => null)));
+  const langs = {};
+  const segments = [];
+  results.forEach((r, i) => {
+    if (!r || !String(r.transcript || "").trim()) return;
+    if (r.language_code) langs[r.language_code] = (langs[r.language_code] || 0) + 1;
+    segments.push({ i: segments.length, text: String(r.transcript).trim(), start: +pieces[i].start.toFixed(2), end: +pieces[i].end.toFixed(2) });
+  });
+  const language = Object.entries(langs).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  return { segments, language };
 }
 
 function auditPrompt(meta, segments, language) {
@@ -152,7 +206,7 @@ function auditPrompt(meta, segments, language) {
       promise: { amount_inr: null, date: null },
       summary: "one plain English sentence for a compliance manager",
     }),
-    "Split a segment into turns only if two speakers are clearly inside it. For a failed check, set seg to the segment index where it happens. If the call gives no information for a check, pass it and say so in why. Use null for promise fields not stated.",
+    "Judge only from what is said on the call, never from the metadata, except the call time. recorded passes only if the agent says on the call that it is being recorded. identity passes only if the agent says both their own name and the lender's name. Threatening police action, arrest or a criminal case over a missed EMI fails both threats and misleading. Stating a penalty that contradicts the loan terms fails misleading. Give one turn per segment, in order; set speaker by what is said. Split a segment into turns only if two speakers are clearly inside it. For a failed check, set seg to the segment index where it happens. If the call gives no information for a check, pass it and say so in why. Use null for promise fields not stated.",
   ].join("\n");
 }
 
@@ -196,9 +250,9 @@ export default async function handler(req, res) {
     const seconds = (wav.length - 44) / (RATE * 2);
 
     const t1 = Date.now();
-    const stt = await transcribe(wav);
+    const { segments, language } = await transcribeCall(wav);
     timings.stt_ms = Date.now() - t1;
-    const segments = segmentsOf(stt);
+    if (!segments.length) return res.status(422).json({ error: "Couldn't hear any speech in that recording.", timings });
 
     const t2 = Date.now();
     const chat = await sarvamJSON("/v1/chat/completions", {
@@ -206,7 +260,7 @@ export default async function handler(req, res) {
       temperature: 0.1,
       reasoning_effort: null,
       max_tokens: 3000,
-      messages: [{ role: "user", content: auditPrompt(meta, segments, stt.language_code) }],
+      messages: [{ role: "user", content: auditPrompt(meta, segments, language) }],
     });
     timings.llm_ms = Date.now() - t2;
     const audit = parseJSON(chat.choices?.[0]?.message?.content || "");
@@ -215,7 +269,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       call: { title: meta.title || "Your recording", lender: meta.lender, agent: meta.agent || null, calledAt: meta.calledAt, terms: meta.terms, seconds },
       audio: body.sample ? wav.toString("base64") : null,
-      language: stt.language_code || null,
+      language,
       segments,
       turns: audit.turns || [],
       checks,
