@@ -176,17 +176,67 @@ function splitAtPauses(pcm) {
   });
 }
 
+
+// Median voice pitch of a stretch of 16 kHz PCM (autocorrelation over 40 ms frames).
+function pitchOf(pcm) {
+  const N = 640, hop = 320, minLag = 40, maxLag = 230;
+  const n = Math.floor(pcm.length / 2);
+  const x = new Float32Array(n);
+  for (let i = 0; i < n; i++) x[i] = pcm.readInt16LE(i * 2) / 32768;
+  const f0s = [];
+  for (let s = 0; s + N + maxLag < n; s += hop) {
+    let e = 0;
+    for (let i = 0; i < N; i++) e += x[s + i] * x[s + i];
+    if (e / N < 0.0004) continue;
+    const rs = new Float32Array(maxLag + 2);
+    let best = 0;
+    for (let lag = minLag; lag <= maxLag; lag++) {
+      let c = 0, e2 = 0;
+      for (let i = 0; i < N; i++) { c += x[s + i] * x[s + i + lag]; e2 += x[s + i + lag] * x[s + i + lag]; }
+      rs[lag] = c / Math.sqrt(e * e2 + 1e-9);
+      if (rs[lag] > best) best = rs[lag];
+    }
+    if (best < 0.45) continue;
+    // Take the shortest lag that's a local peak close to the best, to avoid octave errors.
+    for (let lag = minLag + 1; lag < maxLag; lag++) {
+      if (rs[lag] >= 0.9 * best && rs[lag] >= rs[lag - 1] && rs[lag] >= rs[lag + 1]) { f0s.push(RATE / lag); break; }
+    }
+  }
+  if (!f0s.length) return null;
+  f0s.sort((a, b) => a - b);
+  return f0s[Math.floor(f0s.length / 2)];
+}
+
+// Group segments into two voices by pitch (1-D two-means on log pitch).
+function voices(pitches) {
+  const known = pitches.map((p, i) => [i, p]).filter(([, p]) => p);
+  if (known.length < 2) return pitches.map(() => null);
+  const logs = known.map(([, p]) => Math.log(p));
+  let lo = Math.min(...logs), hi = Math.max(...logs);
+  if (hi - lo < Math.log(1.25)) return pitches.map(() => 1); // one voice, or two too close to tell
+  for (let k = 0; k < 10; k++) {
+    const a = [], b = [];
+    logs.forEach((v) => (Math.abs(v - lo) <= Math.abs(v - hi) ? a : b).push(v));
+    lo = a.reduce((s, v) => s + v, 0) / (a.length || 1);
+    hi = b.reduce((s, v) => s + v, 0) / (b.length || 1);
+  }
+  const out = pitches.map(() => null);
+  known.forEach(([i], k) => { out[i] = Math.abs(logs[k] - lo) <= Math.abs(logs[k] - hi) ? 1 : 2; });
+  return out;
+}
+
 async function transcribeCall(wav) {
   const pcm = pcmOf(wav);
   const pieces = splitAtPauses(pcm);
   if (!pieces.length) return { segments: [], language: null };
   const results = await Promise.all(pieces.map((p) => transcribe(wavOf(p.pcm)).catch(() => null)));
+  const voiceOf = voices(pieces.map((p) => pitchOf(p.pcm)));
   const langs = {};
   const segments = [];
   results.forEach((r, i) => {
     if (!r || !String(r.transcript || "").trim()) return;
     if (r.language_code) langs[r.language_code] = (langs[r.language_code] || 0) + 1;
-    segments.push({ i: segments.length, text: String(r.transcript).trim(), start: +pieces[i].start.toFixed(2), end: +pieces[i].end.toFixed(2) });
+    segments.push({ i: segments.length, text: String(r.transcript).trim(), start: +pieces[i].start.toFixed(2), end: +pieces[i].end.toFixed(2), voice: voiceOf[i] });
   });
   const language = Object.entries(langs).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
   return { segments, language };
@@ -198,7 +248,7 @@ function auditPrompt(meta, segments, language) {
     "Rules (RBI directions on conduct in recovery of loans, in force 1 Jan 2027): contact only 08:00–19:00; tell the borrower the call is recorded; no abusive or threatening language, intimidation, threatening calls or public humiliation; deal only with the borrower or guarantor and never pressure family, friends, neighbours or co-workers; no false or misleading representations; no calls during bereavement, medical emergencies, calamities or marriage functions. Good practice: the agent names themselves and the lender.",
     `Call metadata: lender ${meta.lender}; call time ${meta.calledAt || "unknown"}; loan terms: ${meta.terms || "unknown"}.`,
     `Transcript segments from Saaras (language ${language || "unknown"}), as JSON with start times in seconds:`,
-    JSON.stringify(segments.map(({ i, text, start }) => ({ i, text, start }))),
+    JSON.stringify(segments.map(({ i, text, start, voice }) => ({ i, text, start, voice }))),
     "Return ONLY a JSON object, no prose, with this shape:",
     JSON.stringify({
       turns: [{ seg: 0, speaker: "agent|borrower", text: "segment text as transcribed", english: "short English gloss" }],
@@ -206,7 +256,7 @@ function auditPrompt(meta, segments, language) {
       promise: { amount_inr: null, date: null },
       summary: "one plain English sentence for a compliance manager",
     }),
-    "Judge only from what is said on the call, never from the metadata, except the call time. recorded passes only if the agent says on the call that it is being recorded. identity passes only if the agent says both their own name and the lender's name. Threatening police action, arrest or a criminal case over a missed EMI fails both threats and misleading. Stating a penalty that contradicts the loan terms fails misleading. Give one turn per segment, in order; set speaker by what is said. Split a segment into turns only if two speakers are clearly inside it. For a failed check, set seg to the segment index where it happens. If the call gives no information for a check, pass it and say so in why. Use null for promise fields not stated.",
+    "Judge only from what is said on the call, never from the metadata, except the call time. recorded passes only if the agent says on the call that it is being recorded. identity passes only if the agent says both their own name and the lender's name. Threatening police action, arrest or a criminal case over a missed EMI fails both threats and misleading. Stating a penalty that contradicts the loan terms fails misleading. Give one turn per segment, in order. Each segment has a voice number from pitch analysis: segments with the same voice number are almost certainly the same person, so use it to decide speakers and only override it when the words make it impossible. Work out which voice is the agent from what they say. Split a segment into turns only if two speakers are clearly inside it. For a failed check, set seg to the segment index where it happens. If the call gives no information for a check, pass it and say so in why. Use null for promise fields not stated.",
   ].join("\n");
 }
 
