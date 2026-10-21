@@ -314,7 +314,15 @@ export default async function handler(req, res) {
     });
     timings.llm_ms = Date.now() - t2;
     const audit = parseJSON(chat.choices?.[0]?.message?.content || "");
-    const checks = [hoursCheck(meta.calledAt), ...(audit.checks || []).filter((c) => c && c.id !== "hours")];
+    const got = new Map();
+    (audit.checks || []).forEach((c) => c && c.id && !got.has(c.id) && got.set(c.id, c));
+    const checks = [
+      hoursCheck(meta.calledAt),
+      ...CHECKS.slice(1).map(([id, label]) => {
+        const c = got.get(id);
+        return c ? { id, label, pass: c.pass !== false, seg: Number.isInteger(c.seg) ? c.seg : null, why: c.why || "" } : { id, label, pass: true, seg: null, why: "Nothing on the call bears on this." };
+      }),
+    ];
 
     return res.status(200).json({
       call: { title: meta.title || "Your recording", lender: meta.lender, agent: meta.agent || null, calledAt: meta.calledAt, terms: meta.terms, seconds },
