@@ -1,13 +1,21 @@
-// Records the caller, then hands back 16 kHz mono WAV as base64 — the format Saaras handles best.
+// Records the caller, then hands back 16 kHz mono WAV as base64, the format Saaras handles best.
+import { attachMic } from "./audio.js";
 
 export function createRecorder() {
   let stream = null;
   let rec = null;
   let chunks = [];
+  let detach = () => {};
+
+  const release = () => {
+    detach();
+    stream?.getTracks().forEach((t) => t.stop());
+  };
 
   return {
     async start() {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      detach = attachMic(stream);
       chunks = [];
       rec = new MediaRecorder(stream);
       rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
@@ -15,9 +23,12 @@ export function createRecorder() {
     },
     stop() {
       return new Promise((resolve, reject) => {
-        if (!rec || rec.state === "inactive") return resolve(null);
+        if (!rec || rec.state === "inactive") {
+          release();
+          return resolve(null);
+        }
         rec.onstop = async () => {
-          stream?.getTracks().forEach((t) => t.stop());
+          release();
           try {
             resolve(await toWavBase64(new Blob(chunks, { type: rec.mimeType || "audio/webm" })));
           } catch (e) {
@@ -32,7 +43,7 @@ export function createRecorder() {
         rec.onstop = null;
         rec.stop();
       }
-      stream?.getTracks().forEach((t) => t.stop());
+      release();
     },
   };
 }
