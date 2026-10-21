@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     const a = await call({ sample: u.searchParams.get("sample") || "B" }, audit);
     return res.status(200).json({ ...a, audio: a.audio ? a.audio.length : 0 });
   }
-  const typed = await call({ lang: "kn-IN", text: "ನಿನ್ನೆ ಅಂಗಡಿಗೆ UPI ಮಾಡಿದೆ, ಫೇಲ್ ಆಯ್ತು ಆದರೆ ದುಡ್ಡು ಕಟ್ ಆಗಿದೆ" });
+  const typed = await call({ lang: "kn-IN", speak: true, text: "ನಿನ್ನೆ ಅಂಗಡಿಗೆ UPI ಮಾಡಿದೆ, ಫೇಲ್ ಆಯ್ತು ಆದರೆ ದುಡ್ಡು ಕಟ್ ಆಗಿದೆ" });
   const out = {
     typed: {
       status: typed.status,

@@ -1,7 +1,7 @@
 // One support turn: caller audio (or typed text) -> Saaras v4 STT -> Sarvam-105B -> Bulbul v3 TTS.
 // The Sarvam key lives only in the SARVAM_API_KEY environment variable on the server.
 
-const BASE = "https://api.sarvam.ai";
+import { sarvamJSON, speechToText } from "./_sarvam.js";
 
 // Languages Bulbul v3 can speak. Saaras can hear more (22), so if a caller speaks
 // one Bulbul can't voice, we reply in the language the caller picked on the page.
@@ -60,32 +60,36 @@ function systemPrompt(lang) {
   ].join("\n");
 }
 
-async function sarvamJSON(path, body) {
-  const r = await fetch(BASE + path, {
-    method: "POST",
-    headers: { "api-subscription-key": process.env.SARVAM_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+async function transcribe(wavBase64) {
+  return speechToText(Buffer.from(wavBase64, "base64"), {
+    model: "saaras:v4",
+    mode: "transcribe",
+    language_code: "unknown", // let Saaras work out which language the caller is speaking
+    keyterms: KEYTERMS,
   });
-  const text = await r.text();
-  if (!r.ok) throw new Error(`${path} ${r.status}: ${text.slice(0, 300)}`);
-  return JSON.parse(text);
 }
 
-async function transcribe(wavBase64) {
-  const form = new FormData();
-  form.append("file", new Blob([Buffer.from(wavBase64, "base64")], { type: "audio/wav" }), "turn.wav");
-  form.append("model", "saaras:v4");
-  form.append("mode", "transcribe");
-  form.append("language_code", "unknown"); // let Saaras work out which language the caller is speaking
-  form.append("keyterms", JSON.stringify(KEYTERMS));
-  const r = await fetch(BASE + "/speech-to-text", {
-    method: "POST",
-    headers: { "api-subscription-key": process.env.SARVAM_API_KEY },
-    body: form,
+// Split a reply into sentences so each can be voiced in parallel and played as soon as it's ready.
+export function sentences(text) {
+  const parts = String(text).match(/[^.!?।॥]+[.!?।॥]*\s*/g) || [text];
+  const out = [];
+  for (const p of parts.map((x) => x.trim()).filter(Boolean)) {
+    if (out.length && (p.length < 12 || out.length >= 4)) out[out.length - 1] += " " + p;
+    else out.push(p);
+  }
+  return out;
+}
+
+export async function speak(text, lang) {
+  const tts = await sarvamJSON("/text-to-speech", {
+    text: text.slice(0, 2400),
+    language_code: lang,
+    model: "bulbul:v3",
+    speaker: "priya",
+    pace: 1.05,
+    output_audio_codec: "mp3", // less than half the size of WAV, so it reaches the browser sooner
   });
-  const text = await r.text();
-  if (!r.ok) throw new Error(`/speech-to-text ${r.status}: ${text.slice(0, 300)}`);
-  return JSON.parse(text);
+  return (tts.audios || []).join("");
 }
 
 function clean(s) {
@@ -152,26 +156,16 @@ export default async function handler(req, res) {
     }
     if (!reply) throw new Error(`The model returned an empty reply (finish_reason: ${chat.choices?.[0]?.finish_reason}).`);
 
-    const t2 = Date.now();
-    const tts = await sarvamJSON("/text-to-speech", {
-      text: reply.slice(0, 2400),
-      language_code: lang,
-      model: "bulbul:v3",
-      speaker: "priya",
-      pace: 1.05,
-      output_audio_codec: "mp3", // less than half the size of WAV, so the answer reaches the browser sooner
-    });
-    timings.tts_ms = Date.now() - t2;
+    // The page voices the reply sentence by sentence through /api/speak, so the first words play sooner.
+    // Callers that want one finished clip (the health check) can pass speak: true.
+    let audio = null;
+    if (body.speak === true) {
+      const t2 = Date.now();
+      audio = await speak(reply, lang);
+      timings.tts_ms = Date.now() - t2;
+    }
 
-    return res.status(200).json({
-      customerText,
-      heard,
-      lang,
-      txn,
-      reply,
-      audio: (tts.audios || []).join(""),
-      timings,
-    });
+    return res.status(200).json({ customerText, heard, lang, txn, reply, sentences: sentences(reply), audio, timings });
   } catch (e) {
     return res.status(502).json({ error: "Sarvam call failed: " + e.message, timings });
   }

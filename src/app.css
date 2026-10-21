@@ -265,3 +265,16 @@ h2 { font-weight: 640; font-size: 21px; letter-spacing: -0.015em; margin: 0; }
 
 /* let long trace steps wrap on phones */
 .thought-line__step, .thought-line__step-text { white-space: normal; overflow-wrap: anywhere; }
+
+/* ---------- see the API calls ---------- */
+.peek { margin-top: 16px; border-top: 1px solid var(--hair); padding-top: 12px; }
+.peek summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--kite); list-style: none; }
+.peek summary::-webkit-details-marker { display: none; }
+.peek summary::before { content: "+"; display: inline-block; width: 1.1em; font-weight: 400; }
+.peek[open] summary::before { content: "−"; }
+.peek__block { margin: 14px 0 0; }
+.peek__block figcaption { font-size: 13px; color: var(--ink-2); margin-bottom: 6px; }
+.peek__block pre {
+  margin: 0; padding: 14px 16px; border-radius: 12px; overflow-x: auto;
+  background: #10172b; color: #dfe5f2; font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
+}

@@ -3,6 +3,7 @@ import StatusMark from "../rb/StatusMark.jsx";
 import ThoughtLine from "../rb/ThoughtLine.jsx";
 import Counter from "../rb/Counter.jsx";
 import { toWavBase64 } from "../recorder.js";
+import ApiPeek, { AUDIT_CALLS } from "../ApiPeek.jsx";
 
 const QUEUE = [
   { id: "A", time: "11:20", title: "EMI reminder", lang: "Hindi", agent: "Rohan", amount: 4200 },
@@ -22,6 +23,11 @@ const SHORT = {
   sensitive: "Ignored emergency",
 };
 
+const WORST = ["threats", "misleading", "third_party", "sensitive", "hours", "recorded", "identity"];
+const SAARAS_PER_HOUR = 30; // ₹, Sarvam's published price for speech-to-text
+const costOf = (seconds) => (seconds / 3600) * SAARAS_PER_HOUR;
+const rupees = (v) => (v < 1 ? `₹${v.toFixed(2)}` : `₹${v.toFixed(1)}`);
+
 const secs = (ms) => (ms / 1000).toFixed(1) + " s";
 const clock = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
 
@@ -34,6 +40,8 @@ export default function CallsApp() {
   const [now, setNow] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [uploadTime, setUploadTime] = useState("21:15");
+  const [board, setBoard] = useState({}); // sample id -> result, for the audit-all board
+  const [boardBusy, setBoardBusy] = useState(false);
   const audioRef = useRef(null);
   const resultRef = useRef(null);
 
@@ -57,13 +65,56 @@ export default function CallsApp() {
       steps.push(`Saaras v4 transcribed ${data.call.seconds.toFixed(0)} s of ${LANG[data.language] || "speech"} in ${data.segments.length} pieces · ${secs(t.stt_ms)}`);
       steps.push(`Sarvam-105B checked it against ${data.checks.length} rules · ${secs(t.llm_ms)}`);
       setTrace({ working: false, steps, elapsed: ((t.voice_ms || 0) + (t.stt_ms || 0) + (t.llm_ms || 0)) / 1000 });
-      setResult({ ...data, localAudio: payload.localAudio || null });
+      setResult({ ...data, localAudio: payload.localAudio || null, steps, elapsedAll: ((t.voice_ms || 0) + (t.stt_ms || 0) + (t.llm_ms || 0)) / 1000 });
+      if (payload.sample) setBoard((b) => ({ ...b, [payload.sample]: { ...data, steps } }));
     } catch (e) {
       setError(e.message);
       setTrace(null);
     } finally {
       setBusy(false);
     }
+  }
+
+  // Audit every call in the queue at once, staggered a little to stay under the rate limit.
+  async function runAll() {
+    setBoardBusy(true);
+    setError("");
+    const t0 = performance.now();
+    const results = await Promise.all(
+      QUEUE.map((c, k) =>
+        new Promise((r) => setTimeout(r, k * 500))
+          .then(() => fetch("/api/audit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sample: c.id }) }))
+          .then((r) => r.json().then((d) => (r.ok ? d : null)))
+          .catch(() => null)
+          .then((d) => {
+            if (d) setBoard((b) => ({ ...b, [c.id]: d }));
+            return d;
+          })
+      )
+    );
+    setBoardBusy(false);
+    const ok = results.filter(Boolean);
+    if (!ok.length) return setError("Couldn't audit the calls. Try again.");
+    setBoard((b) => ({ ...b, _wall: (performance.now() - t0) / 1000 }));
+  }
+
+  function openFromBoard(id) {
+    const d = board[id];
+    if (!d) return;
+    const t = d.timings || {};
+    setPicked(id);
+    setError("");
+    setTrace({
+      working: false,
+      steps: [
+        ...(t.voice_ms != null ? [`Bulbul v3 voiced the script in two voices · ${secs(t.voice_ms)}`] : []),
+        `Saaras v4 transcribed ${d.call.seconds.toFixed(0)} s of ${LANG[d.language] || "speech"} in ${d.segments.length} pieces · ${secs(t.stt_ms)}`,
+        `Sarvam-105B checked it against ${d.checks.length} rules · ${secs(t.llm_ms)}`,
+      ],
+      elapsed: ((t.voice_ms || 0) + (t.stt_ms || 0) + (t.llm_ms || 0)) / 1000,
+    });
+    setResult({ ...d, localAudio: null });
+    requestAnimationFrame(() => resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
   async function onUpload(e) {
@@ -133,7 +184,9 @@ export default function CallsApp() {
       <section className="hc-queue" aria-labelledby="queue-h">
         <div className="hc-queue__head">
           <h2 id="queue-h">Today's recovery calls</h2>
-          <p>Saathi Finance. Pick one to audit.</p>
+          <button type="button" className="hc-all" disabled={busy || boardBusy} onClick={runAll}>
+            {boardBusy ? "Auditing all three…" : "Audit all calls"}
+          </button>
         </div>
         <ol className="hc-calls">
           {QUEUE.map((c) => (
@@ -147,6 +200,55 @@ export default function CallsApp() {
             </li>
           ))}
         </ol>
+        {(boardBusy || QUEUE.some((c) => board[c.id])) && (
+          <div className="hc-board" aria-live="polite">
+            <div className="hc-board__head">
+              <h3>Compliance board</h3>
+              {(() => {
+                const done = QUEUE.filter((c) => board[c.id]);
+                const breaks = done.reduce((n, c) => n + board[c.id].checks.filter((x) => x.pass === false).length, 0);
+                const review = done.filter((c) => board[c.id].checks.some((x) => x.pass === false && WORST.slice(0, 4).includes(x.id))).length;
+                const cost = done.reduce((n, c) => n + costOf(board[c.id].call.seconds), 0);
+                return (
+                  <p>
+                    {done.length} of {QUEUE.length} audited. {breaks} rules broken. {review} {review === 1 ? "call needs" : "calls need"} review.
+                    Transcription cost {rupees(cost)}.
+                  </p>
+                );
+              })()}
+            </div>
+            <ol className="hc-board__rows">
+              {QUEUE.map((c) => {
+                const d = board[c.id];
+                const failed = d ? d.checks.filter((x) => x.pass === false) : [];
+                const worst = WORST.find((id) => failed.some((x) => x.id === id));
+                return (
+                  <li key={c.id}>
+                    <button type="button" className="hc-brow" disabled={!d} onClick={() => openFromBoard(c.id)} data-tone={!d ? "wait" : failed.length === 0 ? "ok" : failed.some((x) => WORST.slice(0, 4).includes(x.id)) ? "bad" : "warn"}>
+                      <span className="hc-brow__time">{c.time}</span>
+                      <span className="hc-brow__who">
+                        {c.title}
+                        <small>{c.lang}. Agent {c.agent}.</small>
+                      </span>
+                      <span className="hc-brow__dots" aria-label={d ? `${failed.length} of 7 rules broken` : "Auditing"}>
+                        {(d ? d.checks : Array.from({ length: 7 }, () => null)).map((x, i) => (
+                          <i key={i} data-fail={x && x.pass === false ? "" : undefined} data-wait={!x ? "" : undefined} />
+                        ))}
+                      </span>
+                      <span className="hc-brow__issue">{d ? (worst ? SHORT[worst] : "Clean") : "Listening…"}</span>
+                      <span className="hc-brow__promise">
+                        {d && d.promise && (d.promise.amount_inr || d.promise.date)
+                          ? `${d.promise.amount_inr ? "₹" + Number(d.promise.amount_inr).toLocaleString("en-IN") : ""}${d.promise.date ? (d.promise.amount_inr ? ", " : "") + d.promise.date : ""}`
+                          : d ? "No promise" : ""}
+                      </span>
+                      <span className="hc-brow__cost">{d ? rupees(costOf(d.call.seconds)) : ""}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        )}
         <div className="hc-upload">
           <label className="hc-upload__file">
             <input type="file" accept="audio/*" onChange={onUpload} disabled={busy} />
@@ -169,7 +271,7 @@ export default function CallsApp() {
               <h2 id="listen-h">{result ? result.call.title : "Listening…"}</h2>
               {result && (
                 <p className="hc-sub">
-                  {result.call.lender}. {result.call.calledAt ? `Called at ${result.call.calledAt}` : "Call time unknown"}. {clock(duration)} long.
+                  {result.call.lender}. {result.call.calledAt ? `Called at ${result.call.calledAt}` : "Call time unknown"}. {clock(duration)} long. Saaras cost {rupees(costOf(duration))}.
                 </p>
               )}
 
@@ -309,6 +411,7 @@ export default function CallsApp() {
                     glyphColor="var(--kite)"
                   />
                 )}
+                <ApiPeek blocks={AUDIT_CALLS} />
               </section>
             </aside>
           </div>

@@ -2,7 +2,7 @@
 // Sample calls are scripts voiced by Bulbul v3 (two speakers), so there is real audio to transcribe.
 // Pipeline: [Bulbul, samples only] -> Saaras v4 (timestamps) -> Sarvam-105B audit -> JSON.
 
-const BASE = "https://api.sarvam.ai";
+import { sarvamJSON, speechToText } from "./_sarvam.js";
 const RATE = 16000;
 
 export const SAMPLES = {
@@ -62,17 +62,6 @@ const CHECKS = [
   ["sensitive", "Backed off during a medical emergency or bereavement"],
 ];
 
-async function sarvamJSON(path, body) {
-  const r = await fetch(BASE + path, {
-    method: "POST",
-    headers: { "api-subscription-key": process.env.SARVAM_API_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const text = await r.text();
-  if (!r.ok) throw new Error(`${path} ${r.status}: ${text.slice(0, 300)}`);
-  return JSON.parse(text);
-}
-
 // Pull raw 16-bit PCM out of a WAV file.
 function pcmOf(wav) {
   let i = 12;
@@ -112,21 +101,13 @@ async function voice(sample) {
   return wav;
 }
 
-async function transcribe(wav) {
-  const form = new FormData();
-  form.append("file", new Blob([wav], { type: "audio/wav" }), "call.wav");
-  form.append("model", "saaras:v4");
-  form.append("mode", "transcribe");
-  form.append("language_code", "unknown");
-  form.append("keyterms", JSON.stringify(["EMI", "Saathi Finance", "UPI", "NACH", "police", "late fee"]));
-  const r = await fetch(BASE + "/speech-to-text", {
-    method: "POST",
-    headers: { "api-subscription-key": process.env.SARVAM_API_KEY },
-    body: form,
+function transcribe(wav) {
+  return speechToText(wav, {
+    model: "saaras:v4",
+    mode: "transcribe",
+    language_code: "unknown",
+    keyterms: ["EMI", "Saathi Finance", "UPI", "NACH", "police", "late fee"],
   });
-  const text = await r.text();
-  if (!r.ok) throw new Error(`/speech-to-text ${r.status}: ${text.slice(0, 300)}`);
-  return JSON.parse(text);
 }
 
 // Split the call at pauses (simple energy VAD), so each turn gets its own timestamp.

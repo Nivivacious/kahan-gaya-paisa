@@ -6,8 +6,9 @@ import Counter from "./rb/Counter.jsx";
 import RotatingText from "./rb/RotatingText.jsx";
 import Kite from "./Kite.jsx";
 import Journey from "./Journey.jsx";
+import ApiPeek, { TURN_CALLS } from "./ApiPeek.jsx";
 import { createRecorder } from "./recorder.js";
-import { player } from "./audio.js";
+import { player, playQueue, stopQueue, progress, speaking as isSpeaking } from "./audio.js";
 
 const LANGS = [
   ["kn-IN", "ಕನ್ನಡ", "Kannada"],
@@ -100,23 +101,24 @@ function Subtitle({ text, lang, live }) {
       setLit(words.length);
       return undefined;
     }
-    const el = player();
-    const started = performance.now();
     let raf = 0;
+    const mounted = performance.now();
     const tick = () => {
-      // If the audio never starts (autoplay blocked, no audio), just show the full text.
-      if (el.paused && el.currentTime === 0 && performance.now() - started > 1500) {
+      const p = progress();
+      // The queue starts a frame after this line renders; give it a moment before giving up.
+      if (p === null && performance.now() - mounted < 1500) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
+      if (p === null || p >= 1) {
         setLit(words.length);
         return;
       }
-      if (el.duration && isFinite(el.duration)) {
-        setLit(el.ended ? words.length : Math.ceil((el.currentTime / el.duration) * words.length));
-      }
-      if (el.ended) setLit(words.length);
-      else raf = requestAnimationFrame(tick);
+      setLit(Math.ceil(p * words.length));
+      raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    const stop = setTimeout(() => setLit(words.length), 30000);
+    const stop = setTimeout(() => setLit(words.length), 40000);
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(stop);
@@ -158,18 +160,38 @@ export default function App() {
     });
   }
 
-  function play(b64) {
-    if (!b64) return;
-    const el = player();
-    el.pause();
-    el.src = "data:audio/mpeg;base64," + b64;
-    el.onplay = () => setSpeaking(true);
-    el.onended = el.onpause = () => setSpeaking(false);
-    el.play().catch(() => setStatus("Tap Play again to hear it."));
+  // Voice the reply one sentence at a time, in parallel; play the first as soon as it's ready.
+  function speakReply(msgIndex, parts, lang, onFirst) {
+    const weights = parts.map((p) => p.split(/\s+/).filter(Boolean).length || 1);
+    const t0 = performance.now();
+    const items = parts.map((text) =>
+      fetch("/api/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, lang }) })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d?.audio || null)
+        .catch(() => null)
+    );
+    Promise.all(items).then((audios) =>
+      setMessages((m) => m.map((x, i) => (i === msgIndex ? { ...x, audios, weights } : x)))
+    );
+    setSpeaking(true);
+    playQueue(items, weights, {
+      onStart: () => onFirst?.((performance.now() - t0) / 1000),
+      onDone: (blocked) => {
+        setSpeaking(false);
+        if (blocked) setStatus("Tap Play again to hear it.");
+      },
+    });
+  }
+
+  function replay(m) {
+    if (!m.audios) return;
+    setSpeaking(true);
+    playQueue(m.audios.map((a) => Promise.resolve(a)), m.weights, { onDone: () => setSpeaking(false) });
   }
 
   async function ask(payload) {
     if (busy) return;
+    stopQueue();
     player(); // set up audio on this tap so the reply can autoplay
     setBusy(true);
     setTrace({ working: true, steps: [payload.audio ? "Sending your voice to Saaras v4" : "Reading the question"] });
@@ -194,16 +216,27 @@ export default function App() {
         steps.push(`Saaras v4 heard ${heard}${conf} · ${secs(t.stt_ms)}`);
       }
       steps.push(`Sarvam-105B matched ${row ? row.who : "no payment"} · ${secs(t.llm_ms)}`);
-      steps.push(`Bulbul v3 answered in ${LANG_NAME[data.lang] || "her language"} · ${secs(t.tts_ms)}`);
-      const total = (t.stt_ms || 0) + (t.llm_ms || 0) + (t.tts_ms || 0);
+      const base = (t.stt_ms || 0) + (t.llm_ms || 0);
+      steps.push(`Bulbul v3 voicing ${data.sentences.length} ${data.sentences.length === 1 ? "sentence" : "sentences"} in ${LANG_NAME[data.lang] || "her language"}, in parallel`);
+      setTrace({ working: true, steps });
 
-      setMessages((m) => [
-        ...(payload.audio ? [...m, { role: "user", content: data.customerText }] : m),
-        { role: "assistant", content: data.reply, audio: data.audio, lang: data.lang },
-      ]);
+      let index = 0;
+      setMessages((m) => {
+        const next = [
+          ...(payload.audio ? [...m, { role: "user", content: data.customerText }] : m),
+          { role: "assistant", content: data.reply, lang: data.lang },
+        ];
+        index = next.length - 1;
+        return next;
+      });
       setMatched(data.txn);
-      setTrace({ working: false, steps, elapsed: total / 1000 });
-      play(data.audio);
+      requestAnimationFrame(() =>
+        speakReply(index, data.sentences, data.lang, (firstSec) => {
+          const done = [...steps];
+          done[done.length - 1] = `Bulbul v3 started speaking ${LANG_NAME[data.lang] || ""} · ${firstSec.toFixed(1)} s`;
+          setTrace({ working: false, steps: done, elapsed: base / 1000 + firstSec, label: "First words in" });
+        })
+      );
       setStatus("Ask a follow-up. Or switch language.");
     } catch (e) {
       setMessages((m) => [...m, { role: "error", content: e.message }]);
@@ -216,7 +249,7 @@ export default function App() {
   }
 
   async function onStart() {
-    player().pause();
+    stopQueue();
     setListening(true);
     setStatus("Listening. Tap again to send.");
     try {
@@ -312,7 +345,7 @@ export default function App() {
                     {m.role === "assistant" ? (
                       <>
                         <Subtitle text={m.content} lang={m.lang} live={i === lastBank} />
-                        <button type="button" className="line__play" onClick={() => play(m.audio)}>Play again</button>
+                        <button type="button" className="line__play" disabled={!m.audios} onClick={() => replay(m)}>{m.audios ? "Play again" : "Voicing…"}</button>
                       </>
                     ) : (
                       <p className="line__text">{m.content}</p>
@@ -406,7 +439,7 @@ export default function App() {
               <ThoughtLine
                 key={trace.working ? "w" : "d" + trace.elapsed}
                 label="Working"
-                doneLabel="Answered in"
+                doneLabel={trace.label || "Answered in"}
                 glyph="dot"
                 steps={trace.steps}
                 working={trace.working}
@@ -419,6 +452,7 @@ export default function App() {
             ) : (
               <p className="trace__empty">Three Sarvam calls per answer. Timings land here.</p>
             )}
+            <ApiPeek blocks={TURN_CALLS} />
           </section>
         </aside>
       </main>
