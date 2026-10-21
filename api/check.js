@@ -32,7 +32,7 @@ export default async function handler(req, res) {
     },
   };
 
-  if (typed.audio) {
+  if (typed.audio && req.query.step === "voice") {
     const spoken = await call({ lang: "hi-IN", audio: typed.audio });
     out.voice = {
       status: spoken.status,
